@@ -5,7 +5,40 @@
 set -e
 
 # Smart default instruction for general use cases
-DEFAULT_INSTRUCTION="Organize files chronologically with content-based names. Use YYYY-MM-DD_Type_Description format. Extract dates from text, identify document categories (Invoice, Contract, Report, Meeting, Payslip, Receipt, etc.), and create descriptive but concise filenames."
+DEFAULT_INSTRUCTION="Analyze the document content (not just the filename) to create descriptive, well-organized filenames. Use chronological sorting when dates are relevant.
+
+CRITICAL: Base the rename on CONTENT analysis, not the original filename. The original filename may be meaningless.
+
+Format Guidelines:
+- IF a meaningful date exists in content: YYYY-MM-DD_[ActualType]_Description
+- IF no relevant date or date doesn't make sense: [ActualType]_Description
+- Use underscores (_) as separators, no spaces or special characters
+- DO NOT include file extensions - return only the filename part
+
+IMPORTANT: Replace [ActualType] with the REAL document type you identify from content:
+Invoice, Contract, Receipt, Payslip, Meeting, Report, CV, Ticket, Statement, Letter, Config, Script, Guide, Manual, etc.
+
+Requirements:
+1. Extract dates from document text ONLY when relevant (invoices, reports, meeting notes, etc.)
+2. Identify the ACTUAL document type from content - never use 'DocumentType' literally
+3. Extract key metadata: company names, vendor names, amounts, people names, topics, project names
+4. Create concise but descriptive names that capture the document's purpose
+5. Keep total length reasonable (under 100 characters)
+6. Use common sense - not every file needs a date
+7. Return ONLY the filename without any extension
+
+Examples of correct transformations:
+- Invoice with date → 2024-03-15_Invoice_ACME_Corp_Services
+- Meeting notes with date → 2024-01-10_Meeting_Notes_Q1_Planning
+- Ticket with price → 2024-03-27_Ticket_Sea_Las_Perlas_Georg_Graf_3_Passengers_98.00
+- Configuration file → Config_Database_Settings
+- Code script → Script_Data_Processing_Sales
+- Generic document → Report_Market_Analysis
+- CV/Resume → CV_John_Smith_Software_Engineer
+- Letter → Letter_Customer_Service_Response
+
+NEVER use 'DocumentType' as literal text - always replace with actual type like Letter, CV, Invoice, etc.
+Return ONLY the filename part - no extensions like .pdf, .txt, .json etc."
 
 # Parse arguments
 AUTO_CONFIRM=false
@@ -46,7 +79,7 @@ if [[ -z "$DIR" ]]; then
   echo "  If no instruction is provided, uses smart defaults for general organization."
   echo ""
   echo "Default Behavior (when no instruction given):"
-  echo "  • Creates chronologically sortable filenames: YYYY-MM-DD_Type_Description.ext"
+  echo "  • Creates chronologically sortable filenames: YYYY-MM-DD_Type_Description"
   echo "  • Extracts dates from document content"
   echo "  • Identifies document types (Invoice, Contract, Report, Meeting, etc.)"
   echo "  • Generates concise but descriptive names"
@@ -325,7 +358,7 @@ safe_rename() {
       counter=$((counter + 1))
       
       # Safety check to prevent infinite loop
-      if [[ $counter -gt 1000 ]]; then
+      if [[ $counter -gt 3 ]]; then
         echo "❌ Could not generate unique filename after 1000 attempts"
         return 1
       fi
@@ -473,6 +506,36 @@ count_extension() {
   echo "$ext_list" | tr ' ' '\n' | grep -c "^$ext$" 2>/dev/null || echo "0"
 }
 
+# Shell-level filename validation (additional security layer)
+validate_shell_filename() {
+  local filename="$1"
+  
+  # Basic checks for shell safety (defense in depth)
+  # Note: Main sanitization happens in Python, this is just extra protection
+  
+  # Check for extremely dangerous patterns
+  if [[ "$filename" == *".."* ]] || [[ "$filename" == *"/"* ]] || [[ "$filename" == *"\\"* ]]; then
+    echo "INVALID" >&2
+    return 1
+  fi
+  
+  # Check for shell metacharacters that survived Python sanitization
+  if [[ "$filename" == *";"* ]] || [[ "$filename" == *"|"* ]] || [[ "$filename" == *"&"* ]] || [[ "$filename" == *\`* ]] || [[ "$filename" == *'$'* ]]; then
+    echo "INVALID" >&2
+    return 1
+  fi
+  
+  # Check for empty or whitespace-only names
+  if [[ -z "${filename// }" ]]; then
+    echo "INVALID" >&2
+    return 1
+  fi
+  
+  # If all checks pass
+  echo "VALID" >&2
+  return 0
+}
+
 # Function to update the live summary display
 update_summary_display() {
   local current_cost="$1"
@@ -548,7 +611,9 @@ Previous rename examples for consistency:
 "
       fi
       
-      FULL_PROMPT="Instruction: $INSTRUCTION$EXAMPLES_OVERHEAD
+      FULL_PROMPT="Instruction: $INSTRUCTION
+      
+Previously renamed files: $EXAMPLES_OVERHEAD
 
 Original filename: $BASENAME
 
@@ -766,6 +831,17 @@ for FILE in "${files_to_process[@]}"; do
     echo "    Error details: $COST_INFO"
     files_errored=$((files_errored + 1))
     continue
+  fi
+  
+  # Additional shell-level validation (defense in depth)
+  if [[ -n "$NEWNAME" ]]; then
+    validate_shell_filename "$NEWNAME" >/dev/null 2>&1
+    if [[ $? -ne 0 ]]; then
+      show_progress "$current_file_num" "$total_files" "$BASENAME (filename validation failed)" "error"
+      echo "    ⚠️  Filename '$NEWNAME' failed shell validation (security protection)" >&2
+      files_errored=$((files_errored + 1))
+      continue
+    fi
   fi
   
   if [[ -n "$NEWNAME" && "$NEWNAME" != "$BASENAME" ]]; then

@@ -63,6 +63,49 @@ This will:
 - 🔍 **Pre-flight Checks**: Validates all dependencies before running
 - 📊 **Detailed Logging**: Shows progress and status for each file
 
+## 🔒 Security Features
+
+**Enterprise-grade security** protects against injection attacks and ensures safe filename handling:
+
+### Comprehensive Filename Sanitization
+- 🛡️ **Path Traversal Protection**: Blocks `../`, `..\\`, absolute paths (`/etc/passwd`)
+- 🚫 **Shell Injection Prevention**: Removes dangerous metacharacters (`;`, `|`, `&`, backticks, `$()`)
+- 🔐 **Command Injection Blocking**: Prevents execution of embedded commands
+- 📁 **Reserved Name Handling**: Handles Windows reserved names (`CON`, `PRN`, `AUX`, etc.)
+- 🔍 **Hidden File Prevention**: Removes leading dots to prevent accidental hidden files
+- 📏 **Length Limiting**: Enforces reasonable filename length limits (200 chars)
+- 🎯 **Character Filtering**: Allows only safe characters: `a-zA-Z0-9`, spaces, `.`, `-`, `_`, `()`, `[]`
+- 📝 **Space Preservation**: Keeps spaces for readability (normalizes multiple spaces to single spaces)
+
+### Multi-Layer Defense
+1. **Primary sanitization** in Python (`ai_rename.py`)
+2. **Shell-level validation** in bash script  
+3. **Proper variable quoting** throughout the shell script
+4. **Duplicate detection** to prevent overwrites
+
+### Security Testing
+Run the included security test to see protection in action:
+```bash
+python3 test_security.py
+```
+
+This demonstrates protection against:
+- Directory traversal: `../../../etc/passwd` → `passwd.txt`
+- Command injection: `file;rm -rf /` → `unnamed_file.txt`  
+- Shell metacharacters: `file|cat /etc/passwd` → `passwd.txt`
+- Reserved names: `CON.txt` → `file_CON.txt`
+- Hidden files: `.hidden_file.txt` → `hidden_file.txt`
+
+### Security Logging
+When sanitization occurs, you'll see clear notifications:
+```
+🔒 Security: Filename sanitized for safety
+  Original:  ../../../etc/passwd  
+  Sanitized: passwd.txt
+```
+
+**Result**: Even if an AI model were compromised or tried to return malicious filenames, the multi-layer security system ensures only safe, clean filenames are used.
+
 ### 🔄 Consistency Feature
 
 The tool automatically maintains consistent naming patterns during each batch operation:
