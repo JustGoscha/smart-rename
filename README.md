@@ -18,7 +18,7 @@ untitled.md → 2024-03-15_Meeting_Notes_Q1_Planning.md
 
 ```bash
 git clone https://github.com/JustGoscha/smart-rename.git
-cd docrenamer
+cd smart-rename
 ./smart-rename.sh ~/Downloads/
 ```
 
