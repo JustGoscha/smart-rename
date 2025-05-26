@@ -193,7 +193,9 @@ install_dependencies() {
             
             if [[ -n "$api_key" ]]; then
                 echo "OPENAI_API_KEY=$api_key" > .env
-                echo "✅ API key saved to .env file"
+                # Mask the key for confirmation (show first 2 and last 4 chars)
+                masked_key="${api_key:0:2}****${api_key: -4}"
+                echo "✅ API key saved to .env file as: ${masked_key}"
             else
                 echo "⚠️  No API key entered. You can set it up later by creating a .env file."
                 exit 1
@@ -457,12 +459,7 @@ if [[ -f .env ]]; then
     fi
 fi
 
-if [[ "$api_key_available" == "false" ]]; then
-    echo "⚠️  OpenAI API key is not set up."
-    missing_deps=true
-fi
-
-# If dependencies are missing, offer to install
+# If dependencies are missing (excluding API key), offer to install
 if [[ "$missing_deps" == "true" ]]; then
     echo ""
     if [[ "$AUTO_CONFIRM" == "true" ]]; then
@@ -477,6 +474,52 @@ if [[ "$missing_deps" == "true" ]]; then
     else
         echo "❌ Cannot proceed without required dependencies."
         echo "Run with missing dependencies to see this installer again."
+        exit 1
+    fi
+    # After install, re-check API key and prompt if still missing
+    api_key_available=false
+    if [[ -n "$OPENAI_API_KEY" ]]; then
+        api_key_available=true
+    fi
+    if [[ -f .env ]]; then
+        if grep -q "^OPENAI_API_KEY=" .env && grep "^OPENAI_API_KEY=" .env | cut -d= -f2 | grep -q .; then
+            api_key_available=true
+        fi
+    fi
+fi
+
+# If dependencies are present but API key is missing, prompt for API key setup only
+if [[ "$api_key_available" == "false" ]]; then
+    echo ""
+    echo "🔑 OpenAI API Key Setup"
+    echo "----------------------"
+    echo "You need an OpenAI API key to use this tool."
+    echo "Get your API key from: https://platform.openai.com/api-keys"
+    echo ""
+    if [[ "$AUTO_CONFIRM" == "true" ]]; then
+        echo "❌ Running in non-interactive mode, but no API key found."
+        echo "Please set up your API key first:"
+        echo "  export OPENAI_API_KEY=your-api-key-here"
+        echo "  OR"
+        echo "  echo 'OPENAI_API_KEY=your-api-key-here' > .env"
+        exit 1
+    fi
+    read -p "Do you want to set up your API key now? (y/n): " setup_key
+    if [[ $setup_key =~ ^[Yy]$ ]]; then
+        echo ""
+        read -s -p "Enter your OpenAI API key: " api_key
+        echo ""
+        if [[ -n "$api_key" ]]; then
+            echo "OPENAI_API_KEY=$api_key" > .env
+            masked_key="${api_key:0:2}****${api_key: -4}"
+            echo "✅ API key saved to .env file as: ${masked_key}"
+        else
+            echo "⚠️  No API key entered. You can set it up later by creating a .env file."
+            exit 1
+        fi
+    else
+        echo "⚠️  You need to set up your API key before using this tool."
+        echo "Create a .env file with: OPENAI_API_KEY=your-api-key-here"
         exit 1
     fi
 fi
