@@ -9,7 +9,7 @@ An AI-powered tool that intelligently renames files by analyzing their content, 
 Just download and run! The script will automatically install everything it needs and use intelligent defaults:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/JustGoscha/smart-rename.git
 cd docrenamer
 ./smart-rename.sh ~/Downloads/
 ```
