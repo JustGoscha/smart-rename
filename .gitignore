@@ -39,8 +39,6 @@ env/
 ENV/
 env.bak/
 venv.bak/
-.smart-rename-venv/
-ai_rename_venv.py
 
 # IDE
 .vscode/

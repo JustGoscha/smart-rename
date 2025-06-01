@@ -138,10 +138,6 @@ install_dependencies() {
                 sudo apt-get update && sudo apt-get install -y poppler-utils
             elif command -v yum >/dev/null 2>&1; then
                 sudo yum install -y poppler-utils
-            elif command -v dnf >/dev/null 2>&1; then
-                sudo dnf install -y poppler-utils
-            elif command -v pacman >/dev/null 2>&1; then
-                sudo pacman -S --noconfirm poppler
             else
                 echo "❌ Could not install poppler-utils. Please install manually."
                 exit 1
@@ -150,248 +146,22 @@ install_dependencies() {
         echo "✅ pdftotext installed"
     fi
     
-    # Check and install pip if needed
-    echo "🐍 Checking Python and pip installation..."
-    
-    # Function to check if pip is working
-    check_pip_working() {
-        # Helper function to run commands with timeout (if available)
-        run_with_timeout() {
-            local cmd="$1"
-            if command -v timeout >/dev/null 2>&1; then
-                timeout 10s $cmd
-            else
-                # Fallback without timeout
-                $cmd
-            fi
-        }
-        
-        echo "  Checking for pip3..." >&2
-        if command -v pip3 >/dev/null 2>&1; then
-            echo "  Found pip3, testing functionality..." >&2
-            if run_with_timeout "pip3 --version" >/dev/null 2>&1; then
-                echo "pip3"
-                return 0
-            else
-                echo "  pip3 found but not working or timed out" >&2
-            fi
-        else
-            echo "  pip3 not found" >&2
-        fi
-        
-        echo "  Checking for pip..." >&2
-        if command -v pip >/dev/null 2>&1; then
-            echo "  Found pip, testing functionality..." >&2
-            if run_with_timeout "pip --version" >/dev/null 2>&1; then
-                echo "pip"
-                return 0
-            else
-                echo "  pip found but not working or timed out" >&2
-            fi
-        else
-            echo "  pip not found" >&2
-        fi
-        
-        echo "  Checking for python3 -m pip..." >&2
-        if run_with_timeout "python3 -m pip --version" >/dev/null 2>&1; then
-            echo "python3 -m pip"
-            return 0
-        else
-            echo "  python3 -m pip not working or timed out" >&2
-        fi
-        
-        echo "  No working pip found" >&2
-        return 1
-    }
-    
-    # Try to find working pip
-    echo "  Attempting to detect working pip..." >&2
-    PIP_CMD=$(check_pip_working 2>&1 | tail -1)
-    PIP_AVAILABLE=$?
-    
-    echo "  Detection result: PIP_CMD='$PIP_CMD', exit code=$PIP_AVAILABLE" >&2
-    
-    if [[ $PIP_AVAILABLE -ne 0 || "$PIP_CMD" == *"No working pip found"* ]]; then
-        echo "⚠️  pip is not installed or not working. Installing pip..."
-        
-        if [[ "$OS" == "linux" ]]; then
-            # Try different package managers
-            if command -v apt-get >/dev/null 2>&1; then
-                echo "Installing pip via apt..."
-                sudo apt-get update && sudo apt-get install -y python3-pip
-            elif command -v yum >/dev/null 2>&1; then
-                echo "Installing pip via yum..."
-                sudo yum install -y python3-pip
-            elif command -v dnf >/dev/null 2>&1; then
-                echo "Installing pip via dnf..."
-                sudo dnf install -y python3-pip
-            elif command -v pacman >/dev/null 2>&1; then
-                echo "Installing pip via pacman..."
-                sudo pacman -S --noconfirm python-pip
-            elif command -v zypper >/dev/null 2>&1; then
-                echo "Installing pip via zypper..."
-                sudo zypper install -y python3-pip
-            else
-                echo "❌ Could not detect package manager. Trying to install pip via get-pip.py..."
-                # Fallback: download and install pip manually
-                if command -v curl >/dev/null 2>&1; then
-                    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-                    python3 get-pip.py --user
-                    rm -f get-pip.py
-                elif command -v wget >/dev/null 2>&1; then
-                    wget https://bootstrap.pypa.io/get-pip.py
-                    python3 get-pip.py --user
-                    rm -f get-pip.py
-                else
-                    echo "❌ Could not install pip. Please install pip manually:"
-                    echo "  Option 1: Use your system package manager"
-                    echo "  Option 2: Download and run get-pip.py from https://bootstrap.pypa.io/get-pip.py"
-                    exit 1
-                fi
-            fi
-        elif [[ "$OS" == "macos" ]]; then
-            echo "Installing pip via python3..."
-            python3 -m ensurepip --upgrade
-        fi
-        
-        # Re-check pip availability
-        PIP_CMD=$(check_pip_working)
-        PIP_AVAILABLE=$?
-        
-        if [[ $PIP_AVAILABLE -ne 0 ]]; then
-            echo "❌ Failed to install or setup pip. Please install pip manually and try again."
-            echo ""
-            echo "Manual installation options:"
-            echo "  Ubuntu/Debian: sudo apt install python3-pip"
-            echo "  CentOS/RHEL:   sudo yum install python3-pip"
-            echo "  Fedora:        sudo dnf install python3-pip"
-            echo "  Arch:          sudo pacman -S python-pip"
-            echo "  openSUSE:      sudo zypper install python3-pip"
-            exit 1
-        fi
-        
-        echo "✅ pip installed successfully"
-    else
-        echo "✅ pip is available: $PIP_CMD"
-    fi
-    
     # Install Python dependencies
-    echo "📦 Installing Python dependencies..."
-    
-    # Function to install a package with multiple fallback strategies
-    install_package() {
-        local package="$1"
-        echo "  Installing $package..."
-        
-        # Strategy 1: Try system packages first (Ubuntu/Debian)
-        if [[ "$OS" == "linux" ]] && command -v apt-get >/dev/null 2>&1; then
-            local sys_package=""
-            case "$package" in
-                "openai"*) sys_package="python3-openai" ;;
-                "python-dotenv"*) sys_package="python3-dotenv" ;;
-                "tokencost"*) sys_package="" ;; # Not available in repos
-            esac
-            
-            if [[ -n "$sys_package" ]]; then
-                echo "    Trying system package: $sys_package"
-                if sudo apt-get install -y "$sys_package" >/dev/null 2>&1; then
-                    echo "  ✅ $package installed via system package"
-                    return 0
-                else
-                    echo "    System package not available, trying pip..."
-                fi
-            fi
-        fi
-        
-        # Strategy 2: Try user installation with various approaches
-        local pip_cmd=""
-        if [[ "$PIP_CMD" == "pip3" ]]; then
-            pip_cmd="pip3"
-        elif [[ "$PIP_CMD" == "pip" ]]; then
-            pip_cmd="pip"
-        else
-            pip_cmd="python3 -m pip"
-        fi
-        
-        # Try --user first
-        echo "    Trying user installation..."
-        if $pip_cmd install --user "$package" >/dev/null 2>&1; then
-            echo "  ✅ $package installed via user pip"
-            return 0
-        fi
-        
-        # Strategy 3: Create local virtual environment for this script
-        local venv_dir=".smart-rename-venv"
-        if [[ ! -d "$venv_dir" ]]; then
-            echo "    Creating local virtual environment..."
-            if python3 -m venv "$venv_dir" >/dev/null 2>&1; then
-                echo "    ✅ Virtual environment created"
-            else
-                echo "    ❌ Failed to create virtual environment"
-                return 1
-            fi
-        fi
-        
-        # Install in virtual environment
-        echo "    Installing in virtual environment..."
-        if "$venv_dir/bin/pip" install "$package" >/dev/null 2>&1; then
-            echo "  ✅ $package installed in virtual environment"
-            
-            # Create a wrapper script that uses the venv
-            if [[ ! -f "ai_rename_venv.py" ]]; then
-                cat > ai_rename_venv.py << 'EOF'
-#!/usr/bin/env python3
-import sys
-import os
-import subprocess
-
-# Get the directory of this script
-script_dir = os.path.dirname(os.path.abspath(__file__))
-venv_python = os.path.join(script_dir, '.smart-rename-venv', 'bin', 'python')
-ai_rename_script = os.path.join(script_dir, 'ai_rename.py')
-
-# If venv exists, use it; otherwise fall back to system python
-if os.path.exists(venv_python):
-    # Execute the original script with venv python
-    subprocess.execv(venv_python, [venv_python, ai_rename_script] + sys.argv[1:])
-else:
-    # Fall back to system python
-    subprocess.execv(sys.executable, [sys.executable, ai_rename_script] + sys.argv[1:])
-EOF
-                chmod +x ai_rename_venv.py
-            fi
-            return 0
-        fi
-        
-        # Strategy 4: Last resort - break system packages (with warning)
-        echo "    ⚠️  Trying --break-system-packages (last resort)..."
-        if $pip_cmd install --break-system-packages "$package" >/dev/null 2>&1; then
-            echo "  ⚠️  $package installed with --break-system-packages"
-            echo "    Note: This may affect system stability"
-            return 0
-        fi
-        
-        echo "  ❌ Failed to install $package with all methods"
-        return 1
-    }
-    
-    # Install packages individually for better error handling
+    echo "🐍 Installing Python dependencies..."
     if [[ -f requirements.txt ]]; then
-        echo "Installing from requirements.txt..."
-        while IFS= read -r package; do
-            # Skip empty lines and comments
-            [[ -z "$package" || "$package" == \#* ]] && continue
-            install_package "$package" || echo "⚠️  Continuing despite $package installation failure..."
-        done < requirements.txt
+        # Install from requirements.txt if available
+        if command -v pip3 >/dev/null 2>&1; then
+            pip3 install --user -r requirements.txt
+        elif command -v pip >/dev/null 2>&1; then
+            pip install --user -r requirements.txt
+        else
+            python3 -m pip install --user -r requirements.txt
+        fi
     else
         # Fallback to individual packages
-        echo "Installing individual packages..."
-        install_package "openai" || echo "⚠️  Continuing despite openai installation failure..."
-        install_package "python-dotenv" || echo "⚠️  Continuing despite python-dotenv installation failure..."
-        install_package "tokencost" || echo "⚠️  Continuing despite tokencost installation failure..."
+        python3 -m pip install --user openai python-dotenv tokencost
     fi
-    
-    echo "✅ Python package installation complete"
+    echo "✅ Python packages installed"
     
     # Make scripts executable
     chmod +x smart-rename.sh ai_rename.py 2>/dev/null || true
@@ -670,17 +440,7 @@ if ! python3 -c "import tokencost" 2>/dev/null; then
     python_packages_missing=true
 fi
 
-# Check for pip (needed to install Python packages)
-pip_missing=false
-if ! command -v pip3 >/dev/null 2>&1 && ! command -v pip >/dev/null 2>&1; then
-    # Also check if python3 -m pip works
-    if ! python3 -m pip --version >/dev/null 2>&1; then
-        echo "⚠️  pip is not installed (needed to install Python packages)."
-        pip_missing=true
-    fi
-fi
-
-if [[ "$python_packages_missing" == "true" || "$pip_missing" == "true" ]]; then
+if [[ "$python_packages_missing" == "true" ]]; then
     missing_deps=true
 fi
 
@@ -1098,13 +858,7 @@ for FILE in "${files_to_process[@]}"; do
   TEMP_ERR=$(mktemp)
   
   # Run the command with separated outputs
-  if [[ -f "ai_rename_venv.py" ]]; then
-    # Use virtual environment wrapper if available
-    python3 ai_rename_venv.py --instruction "$INSTRUCTION" --content "$CONTENT" --original "$BASENAME" --examples "$RENAME_EXAMPLES" > "$TEMP_OUT" 2> "$TEMP_ERR"
-  else
-    # Use regular Python
-    python3 ai_rename.py --instruction "$INSTRUCTION" --content "$CONTENT" --original "$BASENAME" --examples "$RENAME_EXAMPLES" > "$TEMP_OUT" 2> "$TEMP_ERR"
-  fi
+  python3 ai_rename.py --instruction "$INSTRUCTION" --content "$CONTENT" --original "$BASENAME" --examples "$RENAME_EXAMPLES" > "$TEMP_OUT" 2> "$TEMP_ERR"
   STATUS=$?
   
   # Read the outputs
